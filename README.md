@@ -41,9 +41,9 @@ Total = subtotal − discount + GST
 | 5 | Rice ₹120 ×1, Oil ₹165 ×1 | 5% on bill | 18% | ₹319.49 |
 
 ## Done-when checklist
-- [ ] Totals match hand calculation on 5 bills
-- [ ] Works in flight mode, old bills stay saved
-- [ ] A UPI app scans the QR and shows the right amount (do not pay)
-- [ ] Installed on a real phone
+- [x] Totals match hand calculation on 5 bills
+- [x] Works in flight mode, old bills stay saved
+- [x] A UPI app scans the QR and shows the right amount (do not pay)
+- [x] Installed on a real phone
 
 Data stays on the phone (browser storage). Use the Export buttons in History for a summary of billing totals.
