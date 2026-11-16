@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bill Book</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#b8205f">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+:root{--bg:#f6f3f5;--card:#fff;--tx:#1d1520;--mu:#6b5f70;--ac:#b8205f;--ln:#e6dde3;--ok:#128c4a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17121a;--card:#241c28;--tx:#f3ecf1;--mu:#a99bb0;--ac:#ec5f9a;--ln:#3a2f40}}
+:root[data-theme="dark"]{--bg:#17121a;--card:#241c28;--tx:#f3ecf1;--mu:#a99bb0;--ac:#ec5f9a;--ln:#3a2f40}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:76px}
+main{max-width:560px;margin:0 auto;padding:14px}
+h1{font-size:22px;margin:4px 0 12px}h2{font-size:15px;margin:16px 0 8px;color:var(--mu);text-transform:uppercase;letter-spacing:.04em}
+.card{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:12px;margin-bottom:12px}
+input,select{width:100%;padding:11px;border:1px solid var(--ln);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit}
+button{font:inherit;border:0;border-radius:10px;padding:11px 14px;background:var(--ac);color:#fff;font-weight:600;cursor:pointer}
+button.g{background:var(--ok)}button.o{background:transparent;color:var(--ac);border:1px solid var(--ac)}
+.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}.row>.s{flex:0 0 auto}
+.chips{display:flex;flex-wrap:wrap;gap:8px}.chips button{background:var(--bg);color:var(--tx);border:1px solid var(--ln)}
+.ln{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--ln)}
+.big{font-size:28px;font-weight:800}.mu{color:var(--mu);font-size:14px}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--ln);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav button{flex:1;background:none;color:var(--mu);border-radius:0;padding:14px 4px}nav button.on{color:var(--ac)}
+#toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:20px;display:none;z-index:9}
+#ov{position:fixed;inset:0;background:rgba(0,0,0,.8);display:none;z-index:8;padding:16px;overflow:auto;text-align:center;color:#fff}
+#ov img{max-width:100%;background:#fff;border-radius:8px}
+canvas{max-width:100%;border:1px solid var(--ln);border-radius:10px}
+</style></head><body>
+<main id="v"></main>
+<nav id="nav"></nav><div id="toast"></div>
+<div id="ov"><p>Press and hold the image to save it, then share it on WhatsApp.</p><img id="oi"><p><button onclick="ov.style.display='none'">Close</button></p></div>
+<script src="qr.js"></script>
+<script>
+const $=s=>document.querySelector(s),ov=$('#ov');
+const load=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}};
+let S=load('bb',{shop:{name:'',upi:'',gst:''},items:[],bills:[],next:101});
+const save=()=>{try{localStorage.setItem('bb',JSON.stringify(S))}catch(e){toast('Could not save on this device')}};
+let cur={lines:[],bd:0,gst:0,cust:''},tab='new',open=null;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const f=p=>'₹'+(p/100).toLocaleString('en-IN',{minimumFractionDigits:p%100?2:0,maximumFractionDigits:2});
+const toP=v=>Math.max(0,Math.round(parseFloat(v)*100)||0);
+function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',2200)}
+function calc(b){
+  const L=b.lines.map(l=>({...l,net:Math.round(l.p*l.q*(100-l.d)/100)}));
+  const sub=L.reduce((a,l)=>a+l.net,0),disc=Math.round(sub*b.bd/100),tax=sub-disc,gst=Math.round(tax*b.gst/100);
+  return{L,sub,disc,gst,total:tax+gst};
+}
+function upiLink(total,no){
+  return 'upi://pay?pa='+encodeURIComponent(S.shop.upi)+'&pn='+encodeURIComponent(S.shop.name||'Shop')+'&am='+(total/100).toFixed(2)+'&cu=INR&tn='+encodeURIComponent('Bill '+no);
+}
+function drawQR(ctx,text,x,y,size){
+  ctx.fillStyle='#fff';ctx.fillRect(x,y,size,size);
+  if(!S.shop.upi){ctx.fillStyle='#999';ctx.font='16px sans-serif';ctx.textAlign='center';ctx.fillText('Add UPI ID in Shop tab',x+size/2,y+size/2);return}
+  const m=makeQR(text),n=m.length,c=(size-16)/n;
+  ctx.fillStyle='#000';
+  for(let r=0;r<n;r++)for(let k=0;k<n;k++)if(m[r][k])ctx.fillRect(Math.floor(x+8+k*c),Math.floor(y+8+r*c),Math.ceil(c),Math.ceil(c));
+}
+function drawBill(cv,b){
+  const c=calc(b),W=600,rows=[['Subtotal',c.sub]];
+  if(c.disc)rows.push(['Discount ('+b.bd+'%)',-c.disc]);
+  if(c.gst)rows.push(['GST ('+b.gst+'%)',c.gst]);
+  const H=190+c.L.length*40+rows.length*34+70+300;cv.width=W;cv.height=H;
+  const x=cv.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,W,H);x.fillStyle='#111';
+  x.font='bold 32px sans-serif';x.fillText(S.shop.name||'My Shop',30,56);
+  x.font='18px sans-serif';x.fillStyle='#555';
+  x.fillText('Bill #'+b.no+'  ·  '+new Date(b.date).toLocaleDateString('en-IN'),30,88);
+  let y=118;if(S.shop.gst){x.fillText('GSTIN: '+S.shop.gst,30,y);y+=26}
+  if(b.cust){x.fillText('Customer: '+b.cust,30,y);y+=26}
+  y+=14;x.fillStyle='#111';x.fillRect(30,y,W-60,2);y+=34;x.font='22px sans-serif';
+  c.L.forEach(l=>{x.textAlign='left';x.fillText(l.name+' × '+l.q+(l.d?' (−'+l.d+'%)':''),30,y);x.textAlign='right';x.fillText(f(l.net),W-30,y);y+=40});
+  x.fillRect(30,y-20,W-60,2);y+=10;
+  rows.forEach(r=>{x.textAlign='left';x.fillText(r[0],30,y);x.textAlign='right';x.fillText((r[1]<0?'−':'')+f(Math.abs(r[1])),W-30,y);y+=34});
+  x.font='bold 30px sans-serif';x.textAlign='left';x.fillText('Total',30,y+16);x.textAlign='right';x.fillText(f(c.total),W-30,y+16);
+  x.textAlign='center';x.font='18px sans-serif';x.fillStyle='#555';x.fillText('Scan to pay with any UPI app',W/2,y+58);
+  drawQR(x,upiLink(c.total,b.no),W/2-130,y+72,260);
+}
+function setTab(t){tab=t;open=null;render()}
+function render(){
+  $('#nav').innerHTML=[['new','New bill'],['hist','History'],['items','Items'],['shop','Shop']].map(a=>`<button class="${tab==a[0]?'on':''}" onclick="setTab('${a[0]}')">${a[1]}</button>`).join('');
+  ({new:vNew,hist:vHist,items:vItems,shop:vShop})[tab]();window.scrollTo(0,0);
+}
+function vNew(){
+  if(open)return vBill();
+  const c=calc(cur);
+  $('#v').innerHTML=`<h1>New bill</h1>
+  <h2>Tap an item to add</h2><div class="card"><div class="chips">${S.items.map((it,i)=>`<button onclick="addI(${i})">${esc(it.name)} · ${f(it.p)}</button>`).join('')||'<span class="mu">No items yet. Add them in the Items tab, or add a one-off below.</span>'}</div>
+  <div class="row" style="margin-top:10px"><input id="qn" placeholder="One-off item"><input id="qp" type="number" inputmode="decimal" placeholder="₹ price"><button class="s" onclick="addQ()">Add</button></div></div>
+  <div class="card">${c.L.map((l,i)=>`<div class="ln"><div><b>${esc(l.name)}</b><div class="mu">${f(l.p)} each</div></div><div style="text-align:right"><b>${f(l.net)}</b></div></div>
+  <div class="row" style="margin:6px 0 10px"><button class="s o" onclick="qty(${i},-1)">−</button><b style="text-align:center;flex:0 0 36px">${l.q}</b><button class="s o" onclick="qty(${i},1)">+</button><input type="number" inputmode="decimal" placeholder="Item disc %" value="${l.d||''}" onchange="cur.lines[${i}].d=Math.min(100,Math.max(0,+this.value||0));render()"></div>`).join('')||'<span class="mu">Bill is empty</span>'}</div>
+  <div class="card"><div class="row"><div><div class="mu">Bill discount %</div><input type="number" inputmode="decimal" value="${cur.bd||''}" onchange="cur.bd=Math.min(100,Math.max(0,+this.value||0));render()"></div>
+  <div><div class="mu">GST</div><select onchange="cur.gst=+this.value;render()">${[0,5,12,18,28].map(g=>`<option value="${g}" ${cur.gst==g?'selected':''}>${g?g+'%':'No GST'}</option>`).join('')}</select></div></div>
+  <div style="margin-top:10px"><input placeholder="Customer name (optional)" value="${esc(cur.cust)}" onchange="cur.cust=this.value"></div>
+  <div class="ln"><span>Subtotal</span><span>${f(c.sub)}</span></div>${c.disc?`<div class="ln"><span>Discount</span><span>−${f(c.disc)}</span></div>`:''}${c.gst?`<div class="ln"><span>GST</span><span>${f(c.gst)}</span></div>`:''}
+  <div class="ln" style="border:0"><span>Total</span><span class="big">${f(c.total)}</span></div></div>
+  <div class="row"><button class="o" onclick="cur={lines:[],bd:0,gst:0,cust:''};render()">Clear</button><button onclick="saveBill()">Save bill</button></div>`;
+}
+const addI=i=>{const it=S.items[i],l=cur.lines.find(x=>x.name==it.name&&x.p==it.p);l?l.q++:cur.lines.push({name:it.name,p:it.p,q:1,d:0});render()};
+function addQ(){const n=$('#qn').value.trim(),p=toP($('#qp').value);if(!n||!p)return toast('Enter name and price');cur.lines.push({name:n,p,q:1,d:0});render()}
+function qty(i,d){cur.lines[i].q+=d;if(cur.lines[i].q<1)cur.lines.splice(i,1);render()}
+function saveBill(){
+  if(!cur.lines.length)return toast('Add at least one item');
+  const b={...cur,no:S.next++,date:Date.now()};S.bills.unshift(b);save();
+  cur={lines:[],bd:0,gst:0,cust:''};open=b.no;toast('Bill saved');render();
+}
+function vBill(){
+  const b=S.bills.find(x=>x.no==open);
+  $('#v').innerHTML=`<h1>Bill #${b.no}</h1><canvas id="cv"></canvas>
+  <div class="row" style="margin-top:12px"><button class="o" onclick="open=null;render()">Back</button><button class="g" onclick="share(${b.no})">Share on WhatsApp</button></div>`;
+  drawBill($('#cv'),b);
+}
+function cap(b){return 'Bill #'+b.no+' from '+(S.shop.name||'our shop')+'. Total: '+f(calc(b).total)+'. Thank you!'}
+function share(no){
+  const b=S.bills.find(x=>x.no==no),cv=document.createElement('canvas');drawBill(cv,b);
+  cv.toBlob(async bl=>{
+    const file=new File([bl],'bill-'+no+'.png',{type:'image/png'});
+    try{
+      if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],text:cap(b)});return}
+    }catch(e){if(e.name==='AbortError')return}
+    dl(bl,file.name);$('#oi').src=cv.toDataURL('image/png');ov.style.display='block';
+    try{navigator.clipboard.writeText(cap(b))}catch(e){}
+  });
+}
+function dl(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
+function today(){const d=new Date().toDateString();return S.bills.filter(b=>new Date(b.date).toDateString()==d)}
+function vHist(){
+  if(open)return vBill();
+  const days={};S.bills.forEach(b=>{const k=new Date(b.date).toDateString();(days[k]=days[k]||[]).push(b)});
+  const td=new Date().toDateString();
+  const html=Object.keys(days).map(k=>{
+    const bs=days[k];let tot=0;bs.forEach(b=>{tot+=calc(b).total});
+    const label=k==td?'Today':new Date(k).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+    return `<div class="card"><div class="row"><b style="font-size:18px">${label}</b><div class="mu" style="text-align:right">${bs.length} bill${bs.length==1?'':'s'}</div></div>
+    <div class="ln" style="border:0"><b>Day total</b><b style="font-size:22px">${f(tot)}</b></div>
+    <h2 style="margin:12px 0 4px">Bills</h2>
+    ${bs.map(b=>{const c=calc(b),r=(t,v)=>`<div class="mu" style="display:flex;justify-content:space-between;padding-left:8px"><span>${t}</span><span>${v}</span></div>`;
+      return `<div style="padding:8px 0;border-bottom:1px dashed var(--ln)"><div class="row" onclick="open=${b.no};render()" style="cursor:pointer"><b>#${b.no} <span class="mu" style="font-weight:400">${new Date(b.date).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})} ${esc(b.cust||'')}</span></b><b style="text-align:right">${f(c.total)}</b></div>
+      ${c.L.map(l=>r(esc(l.name)+' · '+l.q+' × '+f(l.p)+(l.d?' (−'+l.d+'%)':''),f(l.net))).join('')}
+      ${r('Subtotal',f(c.sub))}${c.disc?r('Discount ('+b.bd+'%)','−'+f(c.disc)):''}${c.gst?r('GST ('+b.gst+'%)',f(c.gst)):''}</div>`}).join('')}</div>`;
+  }).join('');
+  $('#v').innerHTML=`<h1>History</h1>${html||'<div class="card mu">No bills yet</div>'}
+  <h2>Backup</h2><div class="row"><button class="o" onclick="exp('json')">Export JSON</button><button class="o" onclick="exp('csv')">Export CSV</button></div>
+  <p class="mu">Export opens the share sheet, or downloads a file if sharing is unavailable.</p>`;
+}
+async function exp(kind){
+  let txt,type;
+  const rows=S.bills.map(b=>{const c=calc(b);return{bill:b.no,date:new Date(b.date).toLocaleDateString('en-IN'),customer:b.cust||'',subtotal:c.sub/100,discount:c.disc/100,gst:c.gst/100,total:c.total/100}});
+  if(kind=='json'){txt=JSON.stringify(rows,null,1);type='application/json'}
+  else{txt='Bill,Date,Customer,Subtotal,Discount,GST,Total\n'+rows.map(r=>[r.bill,r.date,'"'+r.customer.replace(/"/g,'""')+'"',r.subtotal,r.discount,r.gst,r.total].join(',')).join('\n');type='text/csv'}
+  const file=new File([txt],'billbook-history.'+kind,{type});
+  try{if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]});return}}catch(e){if(e.name==='AbortError')return}
+  dl(file,file.name);toast('Exported')
+}
+function vItems(){
+  $('#v').innerHTML=`<h1>Items</h1><div class="card"><div class="row"><input id="in" placeholder="Item name"><input id="ip" type="number" inputmode="decimal" placeholder="₹ price"><button class="s" onclick="addItem()">Add</button></div></div>
+  <div class="card">${S.items.map((it,i)=>`<div class="ln"><span>${esc(it.name)}</span><span>${f(it.p)} <button class="o" style="padding:4px 10px" onclick="S.items.splice(${i},1);save();render()">✕</button></span></div>`).join('')||'<span class="mu">No items yet</span>'}</div>`;
+}
+function addItem(){const n=$('#in').value.trim(),p=toP($('#ip').value);if(!n||!p)return toast('Enter name and price');S.items.push({name:n,p});save();render()}
+function vShop(){
+  $('#v').innerHTML=`<h1>Shop profile</h1><div class="card"><div class="mu">Shop name</div><input id="sn" value="${esc(S.shop.name)}" placeholder="Sharma Stores">
+  <div class="mu" style="margin-top:10px">Your UPI ID (for the QR code)</div><input id="su" value="${esc(S.shop.upi)}" placeholder="name@bank">
+  <div class="mu" style="margin-top:10px">GSTIN (optional)</div><input id="sg" value="${esc(S.shop.gst)}"></div>
+  <button onclick="S.shop={name:$('#sn').value.trim(),upi:$('#su').value.trim(),gst:$('#sg').value.trim()};save();toast('Saved')">Save profile</button>`;
+}
+render();
+if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
+</script></body></html>
